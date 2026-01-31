@@ -4,75 +4,34 @@ import fetch from "node-fetch";
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.get("/gamepasses/:userId", async (req, res) => {
-  const userId = Number(req.params.userId);
-
-  let debug = {
-    userId,
-    pagesFetched: 0,
-    totalItemsSeen: 0,
-    itemsSample: [],
-    creatorIdsSeen: {},
-    pricesSeen: {},
-    rawErrors: []
-  };
-
-  let cursor = "";
+app.get("/gamepasses/universe/:universeId", async (req, res) => {
+  const universeId = req.params.universeId;
 
   try {
-    do {
-      const url =
-        `https://inventory.roblox.com/v1/users/${userId}/inventory` +
-        `?assetTypes=GamePass&limit=100&cursor=${cursor}`;
+    const response = await fetch(
+      `https://games.roblox.com/v1/games/${universeId}/game-passes?limit=100`
+    );
+    const json = await response.json();
 
-      const response = await fetch(url);
-      const json = await response.json();
+    if (!json.data) {
+      return res.json({ passes: [] });
+    }
 
-      debug.pagesFetched++;
+    const passes = json.data
+      .filter(p => p.price && p.price > 0)
+      .map(p => ({
+        id: p.id,
+        name: p.name,
+        price: p.price
+      }));
 
-      if (!json.data) {
-        debug.rawErrors.push("NO_DATA_FIELD");
-        break;
-      }
-
-      for (const item of json.data) {
-        debug.totalItemsSeen++;
-
-        // collect samples (first 5 only)
-        if (debug.itemsSample.length < 5) {
-          debug.itemsSample.push(item);
-        }
-
-        // track creators
-        if (item.creator?.id) {
-          debug.creatorIdsSeen[item.creator.id] =
-            (debug.creatorIdsSeen[item.creator.id] || 0) + 1;
-        }
-
-        // track prices
-        if (item.product?.price !== undefined) {
-          debug.pricesSeen[item.product.price] =
-            (debug.pricesSeen[item.product.price] || 0) + 1;
-        }
-      }
-
-      cursor = json.nextPageCursor;
-
-    } while (cursor);
-
-    res.json({
-      passes: [],
-      debug
-    });
+    res.json({ passes });
 
   } catch (err) {
-    res.status(500).json({
-      passes: [],
-      debug: { error: err.message }
-    });
+    res.status(500).json({ passes: [] });
   }
 });
 
 app.listen(PORT, () => {
-  console.log("HARD DEBUG proxy running");
+  console.log("Universe-based proxy running");
 });
