@@ -7,9 +7,17 @@ const PORT = process.env.PORT || 3000;
 app.get("/gamepasses/:userId", async (req, res) => {
   const userId = Number(req.params.userId);
 
-  let passes = [];
+  let debug = {
+    userId,
+    pagesFetched: 0,
+    totalItemsSeen: 0,
+    itemsSample: [],
+    creatorIdsSeen: {},
+    pricesSeen: {},
+    rawErrors: []
+  };
+
   let cursor = "";
-  let safety = 0;
 
   try {
     do {
@@ -20,38 +28,51 @@ app.get("/gamepasses/:userId", async (req, res) => {
       const response = await fetch(url);
       const json = await response.json();
 
-      if (!json.data) break;
+      debug.pagesFetched++;
+
+      if (!json.data) {
+        debug.rawErrors.push("NO_DATA_FIELD");
+        break;
+      }
 
       for (const item of json.data) {
-        // MUST exist
-        if (!item.product || !item.creator) continue;
+        debug.totalItemsSeen++;
 
-        // Only gamepasses CREATED by the user
-        if (item.creator.id !== userId) continue;
+        // collect samples (first 5 only)
+        if (debug.itemsSample.length < 5) {
+          debug.itemsSample.push(item);
+        }
 
-        // Must be for sale
-        if (!item.product.price || item.product.price <= 0) continue;
+        // track creators
+        if (item.creator?.id) {
+          debug.creatorIdsSeen[item.creator.id] =
+            (debug.creatorIdsSeen[item.creator.id] || 0) + 1;
+        }
 
-        passes.push({
-          id: item.assetId,
-          name: item.name,
-          price: item.product.price
-        });
+        // track prices
+        if (item.product?.price !== undefined) {
+          debug.pricesSeen[item.product.price] =
+            (debug.pricesSeen[item.product.price] || 0) + 1;
+        }
       }
 
       cursor = json.nextPageCursor;
-      safety++;
 
-    } while (cursor && safety < 10); // safety = anti-infinite loop
+    } while (cursor);
 
-    res.json({ passes });
+    res.json({
+      passes: [],
+      debug
+    });
 
   } catch (err) {
-    console.error("Proxy error:", err);
-    res.status(500).json({ passes: [] });
+    res.status(500).json({
+      passes: [],
+      debug: { error: err.message }
+    });
   }
 });
 
 app.listen(PORT, () => {
-  console.log("Gamepass proxy running (final)");
+  console.log("HARD DEBUG proxy running");
 });
