@@ -7,41 +7,51 @@ const PORT = process.env.PORT || 3000;
 app.get("/gamepasses/:userId", async (req, res) => {
   const userId = Number(req.params.userId);
 
+  let passes = [];
+  let cursor = "";
+  let safety = 0;
+
   try {
-    const response = await fetch(
-      `https://inventory.roblox.com/v1/users/${userId}/inventory?assetTypes=GamePass&limit=100`
-    );
+    do {
+      const url =
+        `https://inventory.roblox.com/v1/users/${userId}/inventory` +
+        `?assetTypes=GamePass&limit=100&cursor=${cursor}`;
 
-    const data = await response.json();
+      const response = await fetch(url);
+      const json = await response.json();
 
-    if (!data.data) {
-      return res.json({ passes: [] });
-    }
+      if (!json.data) break;
 
-    let passes = [];
+      for (const item of json.data) {
+        // MUST exist
+        if (!item.product || !item.creator) continue;
 
-    for (const item of data.data) {
-      // Only passes CREATED by the user
-      if (item.creator?.id !== userId) continue;
+        // Only gamepasses CREATED by the user
+        if (item.creator.id !== userId) continue;
 
-      const price = item.product?.price;
-      if (!price || price <= 0) continue;
+        // Must be for sale
+        if (!item.product.price || item.product.price <= 0) continue;
 
-      passes.push({
-        id: item.assetId,
-        name: item.name,
-        price: price
-      });
-    }
+        passes.push({
+          id: item.assetId,
+          name: item.name,
+          price: item.product.price
+        });
+      }
+
+      cursor = json.nextPageCursor;
+      safety++;
+
+    } while (cursor && safety < 10); // safety = anti-infinite loop
 
     res.json({ passes });
 
   } catch (err) {
-    console.error(err);
+    console.error("Proxy error:", err);
     res.status(500).json({ passes: [] });
   }
 });
 
 app.listen(PORT, () => {
-  console.log("Gamepass proxy running");
+  console.log("Gamepass proxy running (final)");
 });
