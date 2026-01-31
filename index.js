@@ -5,66 +5,43 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.get("/gamepasses/:userId", async (req, res) => {
-  const userId = req.params.userId;
-
-  let debug = {
-    userId,
-    gamesFound: 0,
-    universes: [],
-    passesFound: 0
-  };
+  const userId = Number(req.params.userId);
 
   try {
-    // 1️⃣ Fetch games
-    const gamesResponse = await fetch(
-      `https://games.roblox.com/v2/users/${userId}/games?accessFilter=Public&limit=50`
+    const response = await fetch(
+      `https://inventory.roblox.com/v1/users/${userId}/inventory?assetTypes=GamePass&limit=100`
     );
-    const gamesJson = await gamesResponse.json();
 
-    if (!gamesJson.data || gamesJson.data.length === 0) {
-      return res.json({
-        passes: [],
-        debug: { ...debug, error: "NO_GAMES_FOUND" }
-      });
+    const data = await response.json();
+
+    if (!data.data) {
+      return res.json({ passes: [] });
     }
-
-    debug.gamesFound = gamesJson.data.length;
 
     let passes = [];
 
-    // 2️⃣ Loop games
-    for (const game of gamesJson.data) {
-      const universeId = game.universeId;
-      debug.universes.push(universeId);
+    for (const item of data.data) {
+      // Only passes CREATED by the user
+      if (item.creator?.id !== userId) continue;
 
-      const passResponse = await fetch(
-        `https://games.roblox.com/v1/games/${universeId}/game-passes?limit=100`
-      );
-      const passJson = await passResponse.json();
+      const price = item.product?.price;
+      if (!price || price <= 0) continue;
 
-      if (!passJson.data || passJson.data.length === 0) continue;
-
-      for (const pass of passJson.data) {
-        debug.passesFound++;
-
-        passes.push({
-          id: pass.id,
-          name: pass.name,
-          price: pass.price ?? 0
-        });
-      }
+      passes.push({
+        id: item.assetId,
+        name: item.name,
+        price: price
+      });
     }
 
-    res.json({ passes, debug });
+    res.json({ passes });
 
   } catch (err) {
-    res.status(500).json({
-      passes: [],
-      debug: { ...debug, error: err.message }
-    });
+    console.error(err);
+    res.status(500).json({ passes: [] });
   }
 });
 
 app.listen(PORT, () => {
-  console.log(`Debug proxy running on port ${PORT}`);
+  console.log("Gamepass proxy running");
 });
