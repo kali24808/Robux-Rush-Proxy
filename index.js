@@ -3,6 +3,7 @@ import express from "express";
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Get ALL gamepasses owned by a player
 app.get("/gamepasses/user/:userId", async (req, res) => {
   const userId = req.params.userId;
 
@@ -24,7 +25,7 @@ app.get("/gamepasses/user/:userId", async (req, res) => {
     res.json({ passes });
 
   } catch (err) {
-    console.error(err);
+    console.error("ERROR:", err);
     res.status(500).json({ passes: [] });
   }
 });
